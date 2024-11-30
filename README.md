@@ -1,100 +1,85 @@
-# Speckle Automate function template - Python
+# Speckle Automate Workshop Tutorial
 
-This template repository is for a Speckle Automate function written in Python
-using the [specklepy](https://pypi.org/project/specklepy/) SDK to interact with Speckle data.
+## Overview
+This repository contains materials from the Speckle Automate workshop, adapted for self-guided learning. Learn to create automated validation rules for your Speckle models using Python and Google Sheets.
 
-This template contains the full scaffolding required to publish a function to the Automate environment.
-It also has some sane defaults for development environment setups.
+## Prerequisites
+- A Speckle account (free at app.speckle.systems)
+- Basic Python knowledge
+- Python 3.8 or higher
+- Required packages:
+  - speckle-automate
+  - pandas
+  - python-Levenshtein
 
-## Getting started
+## Workshop Structure
+The workshop is divided into several exercises, each building upon the previous:
 
-1. Use this template repository to create a new repository in your own / organization's profile.
+1. **Exercise 1**: Basic Automate Function
+   - Creating a simple automation that adds comments to random objects
+   - Understanding the basic structure of an Automate function
 
-Register the function 
+2. **Exercise 2**: Multiple Object Selection
+   - Working with multiple objects
+   - Adding visualization features
+   - Understanding object filtering
 
-### Add new dependencies
+3. **Exercise 3**: Parameter Validation
+   - Implementing property checks
+   - Working with Revit parameters
+   - Creating validation rules
 
-To add new Python package dependencies to the project, use the following:
-`$ poetry add pandas`
+4. **Exercise 4**: Rule-based Validation
+   - Integrating with Google Sheets
+   - Creating complex validation rules
+   - Understanding the rule system
 
-### Change launch variables
+## Getting Started
 
-Describe how the launch.json should be edited.
+### Setting Up Your Environment
+1. Clone this repository
+2. Install requirements:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Github Codespaces
+### Creating Your Rule Set
+1. Make a copy of our [Google Sheets template](link-to-template)
+2. Follow the template structure for defining rules:
+   - Rule Number
+   - Logic (WHERE/AND)
+   - Property Name
+   - Predicate
+   - Value
+   - Message
+   - Report Severity
 
-Create a new repo from this template, and use the create new code.
+### Publishing Your Rules
+1. In Google Sheets:
+   - File → Share → Publish to Web
+   - Choose "Tab-separated values (.tsv)" format
+   - Copy the published URL
 
-### Using this Speckle Function
+### Running the Automation
+1. Configure your function inputs:
+   - For basic tests: Comment phrase and number of elements
+   - For validation: Category and property names
+   - For rule-based validation: Your published TSV URL
 
-1. [Create](https://automate.speckle.dev/) a new Speckle Automation.
-1. Select your Speckle Project and Speckle Model.
-1. Select the deployed Speckle Function.
-1. Enter a phrase to use in the comment.
-1. Click `Create Automation`.
+2. Deploy to Speckle Automate:
+   - Follow the deployment instructions in each exercise folder
+   - Set up appropriate triggers for your automation
 
-## Getting Started with Creating Your Own Speckle Function
+## Additional Resources
+- [Workshop Slides](link-to-slides)
+- [Speckle Automate Documentation](https://speckle.guide/automate.html)
+- [Python SDK Documentation](https://speckle.xyz/docs/developers/python)
 
-1. [Register](https://automate.speckle.dev/) your Function with [Speckle Automate](https://automate.speckle.dev/) and select the Python template.
-1. A new repository will be created in your GitHub account.
-1. Make changes to your Function in `main.py`. See below for the Developer Requirements and instructions on how to test.
-1. To create a new version of your Function, create a new [GitHub release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) in your repository.
+## Support
+If you encounter any issues or have questions:
+- Check our [Troubleshooting Guide](link)
+- Join the [Speckle Community Forum](https://speckle.community)
+- Open an issue in this repository
 
-## Developer Requirements
-
-1. Install the following:
-    - [Python 3](https://www.python.org/downloads/)
-    - [Poetry](https://python-poetry.org/docs/#installing-with-the-official-installer)
-1. Run `poetry shell && poetry install` to install the required Python packages.
-
-## Building and Testing
-
-The code can be tested locally by running `poetry run pytest`.
-
-### Building and running the Docker Container Image
-
-Running and testing your code on your machine is a great way to develop your Function; the following instructions are a bit more in-depth and only required if you are having issues with your Function in GitHub Actions or on Speckle Automate.
-
-#### Building the Docker Container Image
-
-The GitHub Action packages your code into the format required by Speckle Automate. This is done by building a Docker Image, which Speckle Automate runs. You can attempt to build the Docker Image locally to test the building process.
-
-To build the Docker Container Image, you must have [Docker](https://docs.docker.com/get-docker/) installed.
-
-Once you have Docker running on your local machine:
-
-1. Open a terminal
-1. Navigate to the directory in which you cloned this repository
-1. Run the following command:
-
-    ```bash
-    docker build -f ./Dockerfile -t speckle_automate_python_example .
-    ```
-
-#### Running the Docker Container Image
-
-Once the GitHub Action has built the image, it is sent to Speckle Automate. When Speckle Automate runs your Function as part of an Automation, it will run the Docker Container Image. You can test that your Docker Container Image runs correctly locally.
-
-1. To then run the Docker Container Image, run the following command:
-
-    ```bash
-    docker run --rm speckle_automate_python_example \
-    python -u main.py run \
-    '{"projectId": "1234", "modelId": "1234", "branchName": "myBranch", "versionId": "1234", "speckleServerUrl": "https://speckle.xyz", "automationId": "1234", "automationRevisionId": "1234", "automationRunId": "1234", "functionId": "1234", "functionName": "my function", "functionLogo": "base64EncodedPng"}' \
-    '{}' \
-    yourSpeckleServerAuthenticationToken
-    ```
-
-Let's explain this in more detail:
-
-`docker run—-rm speckle_automate_python_example` tells Docker to run the Docker Container Image we built earlier. `speckle_automate_python_example` is the name of the Docker Container Image. The `--rm` flag tells Docker to remove the container after it has finished running, freeing up space on your machine.
-
-The line `python -u main.py run` is the command run inside the Docker Container Image. The rest of the command is the arguments passed to the command. The arguments are:
-
-- `'{"projectId": "1234", "modelId": "1234", "branchName": "myBranch", "versionId": "1234", "speckleServerUrl": "https://speckle.xyz", "automationId": "1234", "automationRevisionId": "1234", "automationRunId": "1234", "functionId": "1234", "functionName": "my function", "functionLogo": "base64EncodedPng"}'` - the metadata that describes the automation and the function.
-- `{}` - the input parameters for the function the Automation creator can set. Here, they are blank, but you can add your parameters to test your function.
-- `yourSpeckleServerAuthenticationToken`—the authentication token for the Speckle Server that the Automation can connect to. This is required to interact with the Speckle Server, for example, to get data from the Model.
-
-## Resources
-
-- [Learn](https://speckle.guide/dev/python.html) more about SpecklePy and interacting with Speckle from Python.
+## License
+This project is licensed under [appropriate license]
