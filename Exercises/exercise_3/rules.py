@@ -8,6 +8,215 @@ import re
 from Utilities.helpers import speckle_print
 
 
+# Exercise 3 expands the rules system from Exercise 2 into a more comprehensive
+# validation framework. Key improvements include:
+
+# 1. Externalized Configuration:
+#    - Rules are now loaded from a spreadsheet instead of being hardcoded
+#    - Format supports complex rule combinations and grouping
+#    - Enables non-developers to modify validation logic
+
+# 2. Enhanced Rule Processing:
+#    - Rules can be grouped for related validations
+#    - Support for conditional logic (WHERE/AND combinations)
+#    - Flexible severity levels (Warning vs Error)
+#    - Custom messages for better user feedback
+
+# 3. Improved Code Organization:
+#    - Clear separation between rule definitions and rule processing
+#    - More modular and maintainable architecture
+#    - Better support for future rule types
+
+# Dictionary mapping spreadsheet predicates to RevitRules methods
+input_predicate_mapping = {
+    "exists": "has_parameter",
+    "matches": "is_parameter_value",
+    "greater than": "is_parameter_value_greater_than",
+    "less than": "is_parameter_value_less_than",
+    "in range": "is_parameter_value_in_range",
+    "in list": "is_parameter_value_in_list",
+    "equals": "is_parameter_value",
+    "true": "is_parameter_value_true",
+    "false": "is_parameter_value_false",
+    "is like": "is_parameter_value_like",
+}
+
+
+def evaluate_condition(speckle_object: Base, condition: pd.Series) -> bool:
+    """
+    Given a Speckle object and a condition, evaluates the condition and returns a boolean value.
+    A condition is a pandas Series object with the following keys:
+    - 'Property Name': The name of the property to evaluate.
+    - 'Predicate': The predicate to use for evaluation.
+    - 'Value': The value to compare against.
+
+    Args:
+        speckle_object (Base): The Speckle object to evaluate.
+        condition (pd.Series): The condition to evaluate.
+
+    Returns:
+        bool: The result of the evaluation. True if the condition is met, False otherwise.
+    """
+    property_name = condition["Property Name"]
+    predicate_key = condition["Predicate"]
+    value = condition["Value"]
+
+    if predicate_key in input_predicate_mapping:
+        method_name = input_predicate_mapping[predicate_key]
+        method = getattr(RevitRules, method_name, None)
+
+        # speckle_print(f"Checking {property_name} {predicate_key} {value}")
+
+        if method:
+            check_answer = method(speckle_object, property_name, value)
+
+            return check_answer
+    return False
+
+
+def process_rule(
+    speckle_objects: List[Base], rule_group: pd.DataFrame
+) -> Tuple[List[Base], List[Base]]:
+    """
+    Processes rules against Speckle objects, returning those that pass and fail.
+    The first rule ('WHERE') is used as a filter, and subsequent rules are used as conditions ('AND').
+
+    Args:
+        speckle_objects: List of Speckle objects to be processed.
+        rule_group: DataFrame defining the filter and conditions.
+
+    Returns:
+        A tuple of lists containing objects that passed and failed the rule.
+    """
+
+    # Extract the 'WHERE' condition and subsequent 'AND' conditions
+    filter_condition = rule_group.iloc[0]
+    subsequent_conditions = rule_group.iloc[1:]
+
+    # get the last row of the rule_group and get the Message and Report Severity
+    rule_info = rule_group.iloc[-1]
+
+    # Filter objects based on the 'WHERE' condition
+    filtered_objects = [
+        speckle_object
+        for speckle_object in speckle_objects
+        if evaluate_condition(speckle_object, filter_condition)
+    ]
+
+    rule_number = rule_info["Rule Number"]
+
+    speckle_print(
+        f"{ filter_condition['Logic']} {filter_condition['Property Name']} "
+        f"{filter_condition['Predicate']} {filter_condition['Value']}"
+    )
+
+    speckle_print(
+        f"{rule_number}: {len(list(filtered_objects))} objects passed the filter."
+    )
+
+    # Initialize lists for passed and failed objects
+    pass_objects, fail_objects = [], []
+
+    # Evaluate each filtered object against the 'AND' conditions
+    for speckle_object in filtered_objects:
+        if all(
+            evaluate_condition(speckle_object, cond)
+            for _, cond in subsequent_conditions.iterrows()
+        ):
+            pass_objects.append(speckle_object)
+        else:
+            fail_objects.append(speckle_object)
+
+    return pass_objects, fail_objects
+
+
+def apply_rules_to_objects(
+    speckle_objects: List[Base],
+    rules_df: pd.DataFrame,
+    automate_context: AutomationContext,
+) -> dict[str, Tuple[List[Base], List[Base]]]:
+    """
+    Applies defined rules to a list of objects and updates the automate context based on the results.
+
+    Args:
+        speckle_objects (List[Base]): The list of objects to which rules are applied.
+        rules_df (pd.DataFrame): The DataFrame containing rule definitions.
+        automate_context (Any): Context manager is used to attach rule results.
+    """
+    grouped_rules = rules_df.groupby("Rule Number")
+
+    grouped_results = {}
+
+    for rule_id, rule_group in grouped_rules:
+        rule_id_str = str(rule_id)  # Convert rule_id to string
+
+        # Ensure rule_group has necessary columns
+        if (
+            "Message" not in rule_group.columns
+            or "Report Severity" not in rule_group.columns
+        ):
+            continue  # Or raise an exception if these columns are mandatory
+
+        pass_objects, fail_objects = process_rule(speckle_objects, rule_group)
+
+        attach_results(
+            pass_objects, rule_group.iloc[-1], rule_id_str, automate_context, True
+        )
+        attach_results(
+            fail_objects, rule_group.iloc[-1], rule_id_str, automate_context, False
+        )
+
+        grouped_results[rule_id_str] = (pass_objects, fail_objects)
+
+    # return pass_objects, fail_objects for each rule
+    return grouped_results
+
+
+def attach_results(
+    speckle_objects: List[Base],
+    rule_info: pd.Series,
+    rule_id: str,
+    context: AutomationContext,
+    passed: bool,
+) -> None:
+    """
+    Attaches the results of a rule to the objects in the context.
+
+    Args:
+        speckle_objects (List[Base]): The list of objects to which the rule was applied.
+        rule_info (pd.Series): The information about the rule.
+        rule_id (str): The ID of the rule.
+        context (AutomationContext): The context manager for attaching results.
+        passed (bool): Whether the rule passed or failed.
+    """
+
+    if not speckle_objects:
+        return
+
+    message = f"{rule_info['Message']} - {'Passed' if passed else 'Failed'}"
+    if passed:
+        context.attach_info_to_objects(
+            category=f"Rule {rule_id} Success",
+            object_ids=[speckle_object.id for speckle_object in speckle_objects],
+            message=message,
+        )
+    else:
+
+        speckle_print(rule_info["Report Severity"])
+
+        severity = (
+            ObjectResultLevel.WARNING
+            if rule_info["Report Severity"].capitalize() == "Warning"
+            or rule_info["Report Severity"].capitalize() == "Warn"
+            else ObjectResultLevel.ERROR
+        )
+        context.attach_result_to_objects(
+            category=f"Rule {rule_id} Results",
+            object_ids=[speckle_object.id for speckle_object in speckle_objects],
+            message=message,
+            level=severity,
+        )
+
 # We're going to define a set of rules that will allow us to filter and
 # process parameters in our Speckle objects. These rules will be encapsulated
 # in a class called `ParameterRules`.
@@ -278,6 +487,12 @@ class RevitRules:
         threshold: float = 0.8,
     ) -> bool:
         """
+        NEW IN EXERCISE 3
+        Support for fuzzy text matching has been added, which is useful when exact matches are too strict.
+        For example, matching "Concrete Type A" with "Concrete Type a" or similar variations.
+        
+        Uses Levenshtein distance for fuzzy matching and regex for exact pattern matching.
+        
         Checks if the value of the specified parameter matches the given pattern.
 
         Args:
@@ -305,6 +520,13 @@ class RevitRules:
     @staticmethod
     def parse_number_from_string(input_string: str):
         """
+        NEW IN EXERCISE 3
+        Utility method to parse numbers from strings, supporting the enhanced
+        numeric validation capabilities added in this exercise.
+        
+        This was added to support reading numeric values from the spreadsheet,
+        where all values come in as strings.
+
         Attempts to parse an integer or float from a given string.
 
         Args:
@@ -329,15 +551,19 @@ class RevitRules:
         speckle_object: Base, parameter_name: str, threshold: str
     ) -> bool:
         """
+        MODIFIED IN EXERCISE 3
+        Updated it to handle string inputs for threshold values (from the spreadsheet).
+        Added parse_number_from_string integration for more robust number handling.
+
         Checks if the value of the specified parameter is greater than the given threshold.
 
         Args:
             speckle_object (Base): The Speckle object to check.
             parameter_name (str): The name of the parameter to check.
-            threshold (Union[int, float]): The threshold value to compare against.
+            threshold (Union[int, float]): The threshold value against which to compare.
 
         Returns:
-            bool: True if the parameter value is greater than the threshold, False otherwise.
+            bool: True if the parameter value exceeds the threshold, False otherwise.
         """
 
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
@@ -355,7 +581,11 @@ class RevitRules:
         speckle_object: Base, parameter_name: str, threshold: str
     ) -> bool:
         """
-        Checks if the value of the specified parameter is less than the given threshold.
+        MODIFIED IN EXERCISE 3
+        Updated it to handle string inputs for threshold values (from the spreadsheet).
+        Added parse_number_from_string integration for more robust number handling.
+        
+        Check if the value of the specified parameter is less than the given threshold.
 
         Args:
             speckle_object (Base): The Speckle object to check.
@@ -445,6 +675,11 @@ class RevitRules:
         speckle_object: Base, parameter_name: str, value_list: List[Any]
     ) -> bool:
         """
+        NEW IN EXERCISE 3
+        Added to support validation against a set of allowed values.
+        It is beneficial for parameters that should only contain specific values,
+        like materials or types from a predefined list.
+        
         Checks if the value of the specified parameter is present in the given list of values.
 
         Args:
@@ -474,6 +709,10 @@ class RevitRules:
     @staticmethod
     def is_parameter_value_true(speckle_object: Base, parameter_name: str) -> bool:
         """
+        NEW IN EXERCISE 3
+        Added specialized boolean validation for True values.
+        It supports the validation of yes/no parameters in Revit.
+        
         Checks if the value of the specified parameter is True.
 
         Args:
@@ -489,6 +728,10 @@ class RevitRules:
     @staticmethod
     def is_parameter_value_false(speckle_object: Base, parameter_name: str) -> bool:
         """
+        NEW IN EXERCISE 3
+        Added specialized boolean validation for False values.
+        Complements is_parameter_value_true for complete boolean validation.
+
         Checks if the value of the specified parameter is False.
 
         Args:
@@ -554,192 +797,4 @@ class RevitRules:
         return RevitRules.get_parameter_value(speckle_object, "category")
 
 
-# Mapping of input predicates to the corresponding methods in RevitRules
-input_predicate_mapping = {
-    "exists": "has_parameter",
-    "matches": "is_parameter_value",
-    "greater than": "is_parameter_value_greater_than",
-    "less than": "is_parameter_value_less_than",
-    "in range": "is_parameter_value_in_range",
-    "in list": "is_parameter_value_in_list",
-    "equals": "is_parameter_value",
-    "true": "is_parameter_value_true",
-    "false": "is_parameter_value_false",
-    "is like": "is_parameter_value_like",
-}
 
-
-def evaluate_condition(speckle_object: Base, condition: pd.Series) -> bool:
-    """
-    Given a Speckle object and a condition, evaluates the condition and returns a boolean value.
-    A condition is a pandas Series object with the following keys:
-    - 'Property Name': The name of the property to evaluate.
-    - 'Predicate': The predicate to use for evaluation.
-    - 'Value': The value to compare against.
-
-    Args:
-        speckle_object (Base): The Speckle object to evaluate.
-        condition (pd.Series): The condition to evaluate.
-
-    Returns:
-        bool: The result of the evaluation. True if the condition is met, False otherwise.
-    """
-    property_name = condition["Property Name"]
-    predicate_key = condition["Predicate"]
-    value = condition["Value"]
-
-    if predicate_key in input_predicate_mapping:
-        method_name = input_predicate_mapping[predicate_key]
-        method = getattr(RevitRules, method_name, None)
-
-        # speckle_print(f"Checking {property_name} {predicate_key} {value}")
-
-        if method:
-            check_answer = method(speckle_object, property_name, value)
-
-            return check_answer
-    return False
-
-
-def process_rule(
-    speckle_objects: List[Base], rule_group: pd.DataFrame
-) -> Tuple[List[Base], List[Base]]:
-    """
-    Processes a set of rules against Speckle objects, returning those that pass and fail.
-    The first rule is used as a filter ('WHERE'), and subsequent rules as conditions ('AND').
-
-    Args:
-        speckle_objects: List of Speckle objects to be processed.
-        rule_group: DataFrame defining the filter and conditions.
-
-    Returns:
-        A tuple of lists containing objects that passed and failed the rule.
-    """
-
-    # Extract the 'WHERE' condition and subsequent 'AND' conditions
-    filter_condition = rule_group.iloc[0]
-    subsequent_conditions = rule_group.iloc[1:]
-
-    # get the last row of the rule_group and get the Message and Report Severity
-    rule_info = rule_group.iloc[-1]
-
-    # Filter objects based on the 'WHERE' condition
-    filtered_objects = [
-        speckle_object
-        for speckle_object in speckle_objects
-        if evaluate_condition(speckle_object, filter_condition)
-    ]
-
-    rule_number = rule_info["Rule Number"]
-
-    speckle_print(
-        f"{ filter_condition['Logic']} {filter_condition['Property Name']} "
-        f"{filter_condition['Predicate']} {filter_condition['Value']}"
-    )
-
-    speckle_print(
-        f"{rule_number}: {len(list(filtered_objects))} objects passed the filter."
-    )
-
-    # Initialize lists for passed and failed objects
-    pass_objects, fail_objects = [], []
-
-    # Evaluate each filtered object against the 'AND' conditions
-    for speckle_object in filtered_objects:
-        if all(
-            evaluate_condition(speckle_object, cond)
-            for _, cond in subsequent_conditions.iterrows()
-        ):
-            pass_objects.append(speckle_object)
-        else:
-            fail_objects.append(speckle_object)
-
-    return pass_objects, fail_objects
-
-
-def apply_rules_to_objects(
-    speckle_objects: List[Base],
-    rules_df: pd.DataFrame,
-    automate_context: AutomationContext,
-) -> dict[str, Tuple[List[Base], List[Base]]]:
-    """
-    Applies defined rules to a list of objects and updates the automate context based on the results.
-
-    Args:
-        speckle_objects (List[Base]): The list of objects to which rules are applied.
-        rules_df (pd.DataFrame): The DataFrame containing rule definitions.
-        automate_context (Any): Context manager for attaching rule results.
-    """
-    grouped_rules = rules_df.groupby("Rule Number")
-
-    grouped_results = {}
-
-    for rule_id, rule_group in grouped_rules:
-        rule_id_str = str(rule_id)  # Convert rule_id to string
-
-        # Ensure rule_group has necessary columns
-        if (
-            "Message" not in rule_group.columns
-            or "Report Severity" not in rule_group.columns
-        ):
-            continue  # Or raise an exception if these columns are mandatory
-
-        pass_objects, fail_objects = process_rule(speckle_objects, rule_group)
-
-        attach_results(
-            pass_objects, rule_group.iloc[-1], rule_id_str, automate_context, True
-        )
-        attach_results(
-            fail_objects, rule_group.iloc[-1], rule_id_str, automate_context, False
-        )
-
-        grouped_results[rule_id_str] = (pass_objects, fail_objects)
-
-    # return pass_objects, fail_objects for each rule
-    return grouped_results
-
-
-def attach_results(
-    speckle_objects: List[Base],
-    rule_info: pd.Series,
-    rule_id: str,
-    context: AutomationContext,
-    passed: bool,
-) -> None:
-    """
-    Attaches the results of a rule to the objects in the context.
-
-    Args:
-        speckle_objects (List[Base]): The list of objects to which the rule was applied.
-        rule_info (pd.Series): The information about the rule.
-        rule_id (str): The ID of the rule.
-        context (AutomationContext): The context manager for attaching results.
-        passed (bool): Whether the rule passed or failed.
-    """
-
-    if not speckle_objects:
-        return
-
-    message = f"{rule_info['Message']} - {'Passed' if passed else 'Failed'}"
-    if passed:
-        context.attach_info_to_objects(
-            category=f"Rule {rule_id} Success",
-            object_ids=[speckle_object.id for speckle_object in speckle_objects],
-            message=message,
-        )
-    else:
-
-        speckle_print(rule_info["Report Severity"])
-
-        severity = (
-            ObjectResultLevel.WARNING
-            if rule_info["Report Severity"].capitalize() == "Warning"
-            or rule_info["Report Severity"].capitalize() == "Warn"
-            else ObjectResultLevel.ERROR
-        )
-        context.attach_result_to_objects(
-            category=f"Rule {rule_id} Results",
-            object_ids=[speckle_object.id for speckle_object in speckle_objects],
-            message=message,
-            level=severity,
-        )
