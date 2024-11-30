@@ -7,8 +7,8 @@ from Utilities.flatten import flatten_base
 
 
 def automate_function(
-  automate_context: AutomationContext,
-  function_inputs: FunctionInputs,
+    automate_context: AutomationContext,
+    function_inputs: FunctionInputs,
 ) -> None:
     """This is an example Speckle Automate function.
 
@@ -20,103 +20,105 @@ def automate_function(
         function_inputs: An instance object matching the defined schema.
     """
 
-    # the context provides a convenient way, to receive the triggering version
+    # No change: Get the root object from the context
     version_root_object = automate_context.receive_version()
 
+    # CHANGE: Convert generator to list for better handling
+    # This allows us to reuse the flat_list_of_objects multiple times
     flat_list_of_objects = list(flatten_base(version_root_object))
 
-    # filter the list to only include objects that are displayable.
-    # this is a simple example, that checks if the object has a displayValue
+    # No change: Basic displayable object filtering
     displayable_objects = [
-      speckle_object
-      for speckle_object in flat_list_of_objects
-      if (
-           getattr(speckle_object, "displayValue", None)
-           or getattr(speckle_object, "@displayValue", None)
-         ) and getattr(speckle_object, "id", None) is not None
+        speckle_object
+        for speckle_object in flat_list_of_objects
+        if (
+            getattr(speckle_object, "displayValue", None)
+            or getattr(speckle_object, "@displayValue", None)
+        )
+        and getattr(speckle_object, "id", None) is not None
     ]
 
-    # a better displayable_objects should also include those instance objects that have a definition property
-    # that cross-references to a speckle id, that is in turn displayable, so we need to add those objects to the list
+    # NEW: Enhanced displayable object detection
+    # Now also includes instance objects that have displayable definitions
+    # This provides better support for more complex Speckle object structures
     displayable_objects += [
-      instance_object
-      for instance_object in flat_list_of_objects
-      if (
-        getattr(instance_object, "definition", None)
-        and (
-          (
-            getattr(
-              getattr(instance_object, "definition"), "displayValue", None
+        instance_object
+        for instance_object in flat_list_of_objects
+        if (
+            getattr(instance_object, "definition", None)
+            and (
+                (
+                    getattr(
+                        getattr(instance_object, "definition"), "displayValue", None
+                    )
+                    or getattr(
+                        getattr(instance_object, "definition"), "@displayValue", None
+                    )
+                )
+                and getattr(getattr(instance_object, "definition"), "id", None)
+                is not None
             )
-            or getattr(
-              getattr(instance_object, "definition"), "@displayValue", None
-            )
-          )
-          and getattr(getattr(instance_object, "definition"), "id", None)
-          is not None
         )
-      )
     ]
 
     if len(displayable_objects) == 0:
+        # No change: Handle case when no displayable objects are found
         automate_context.mark_run_failed(
-          "Automation failed: No displayable objects found."
+            "Automation failed: No displayable objects found."
         )
-
-        print(len(displayable_objects))
 
     else:
-        # select a random object from the list
-        # random_object = random.choice(displayable_objects)
-
-        # instead of a single object we will select a random subset of displayable objects from the provided dataset
+        # MAJOR CHANGE: Multiple object selection
+        # Instead of selecting just one random object, we now select multiple objects
+        # based on the user-specified number_of_elements
         real_number_of_elements = min(
-          # We cant take more elements than we have
-          function_inputs.number_of_elements,
-          len(displayable_objects),
+            function_inputs.number_of_elements,  # User requested amount
+            len(displayable_objects),            # Available amount
         )
 
+        # NEW: Using random.sample instead of random.choice
+        # This allows selection of multiple unique objects
         selected_objects = random.sample(
-          displayable_objects,
-          real_number_of_elements,
+            displayable_objects,
+            real_number_of_elements,
         )
 
-        # create a list of object ids for all selected objects
+        # NEW: Create list of object IDs for batch processing
         selected_object_ids = [obj.id for obj in selected_objects]
 
-        # ACTIONS
-
-        # attach comment phrase to all selected objects
-        # it is possible to attach the same comment phrase to multiple objects
-        # the category "Selected Objects" is used to group the objects in the viewer
-        # grouping results in this way is a clean way to organize the objects in the viewer
+        # MODIFIED: Attach comments to multiple objects
+        # Now operates on all selected objects instead of just one
         comment_message = f"{function_inputs.comment_phrase}"
         automate_context.attach_info_to_objects(
-          category="Selected Objects",
-          object_ids=selected_object_ids,
-          message=comment_message,
+            category="Selected Objects",
+            object_ids=selected_object_ids,
+            message=comment_message,
         )
 
-        # attach index as gradient value for all selected objects. this will be used for visualisation purposes
-        # the category "Index Visualisation" is used to group the objects in the viewer
+        # NEW: Visual feedback enhancement
+        # Added gradient visualization to help users identify selected objects
+        # Each object gets a sequential gradient value for visual distinction
         gradient_values = {
-          object_id: {"gradientValue": index + 1}
-          for index, object_id in enumerate(selected_object_ids)
+            object_id: {"gradientValue": index + 1}
+            for index, object_id in enumerate(selected_object_ids)
         }
 
+        # NEW: Attach gradient visualization data
         automate_context.attach_info_to_objects(
-          category="Index Visualisation",
-          metadata={
-            "gradient": True,
-            "gradientValues": gradient_values,
-          },
-          message="Object Indexes",
-          object_ids=selected_object_ids,
+            category="Index Visualisation",
+            metadata={
+                "gradient": True,
+                "gradientValues": gradient_values,
+            },
+            message="Object Indexes",
+            object_ids=selected_object_ids,
         )
 
+        # MODIFIED: Updated success message
+        # Now includes the actual number of objects processed
         automate_context.mark_run_success(
-          f"Added comment to {real_number_of_elements} random objects."
+            f"Added comment to {real_number_of_elements} random objects."
         )
 
-    # set the automation context view, to the original model / version view
+    # No change: Maintain original view context
     automate_context.set_context_view()
