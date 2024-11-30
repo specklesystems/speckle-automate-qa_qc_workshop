@@ -2,8 +2,6 @@
 
 This exercise builds upon the framework established in Exercise 2 by introducing externalised rule configuration. By moving from hardcoded validation logic to an external, editable format, we reduce the dependency on developers, enable non-technical stakeholders to participate, and create a scalable, flexible QAQC system.
 
----
-
 ## Key Changes from Exercise 2 📈
 
 In **Exercise 2**, rules were **hardcoded** directly into the Python codebase. While this approach works well for specific use cases, it has significant drawbacks:
