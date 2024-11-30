@@ -1,17 +1,20 @@
 from pydantic import Field
 from speckle_automate import AutomateBase
 
-
 class FunctionInputs(AutomateBase):
-    """These are function author defined values.
-
-    Automate will make sure to supply them matching the types specified here.
-    Please use the pydantic model schema to define your inputs:
-    https://docs.pydantic.dev/latest/usage/models/
+    """These are function author-defined values.
+    
+    Exercise 3 demonstrates how to externalize configuration by moving validation rules
+    to an external data source (spreadsheet). This allows non-developers to modify rules
+    without changing code, enabling easier validation logic maintenance and updates.
+    
+    The previous exercise had rules hardcoded in the Python files. Now, we only need
+    a single input - the URL of the spreadsheet containing the rules.
     """
-
-    # In this exercise, we will move rules to an external source so not to hardcode them.
     spreadsheet_url: str = Field(
-      title="Spreadsheet URL",
-      description="This is the URL of the spreadsheet to check. It should be a TSV format data source.",
+        title="Spreadsheet URL",
+        description="This is the URL of the spreadsheet containing validation rules. "
+                   "The spreadsheet should be in TSV (tab-separated values) format and "
+                   "contain columns for Rule Number, Property Name, Predicate, Value, "
+                   "Message, and Report Severity.",
     )
