@@ -1,4 +1,4 @@
-from pydantic import Field, constr
+from pydantic import Field
 from speckle_automate import AutomateBase
 
 
@@ -10,8 +10,7 @@ class FunctionInputs(AutomateBase):
     https://docs.pydantic.dev/latest/usage/models/
     """
 
-    comment_phrase: constr(min_length=1, max_length=500) = Field(
+    comment_phrase: str = Field(
         title="Comment Phrase",
-        description="This phrase will be added to a random model element.",
-        example="This is a sample comment."
+        description="This phrase will be added to a random model element."
     )
