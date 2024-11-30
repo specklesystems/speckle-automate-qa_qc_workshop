@@ -1,85 +1,102 @@
 # Speckle Automate Workshop Tutorial
 
-## Overview
-This repository contains materials from the Speckle Automate workshop, adapted for self-guided learning. Learn to create automated validation rules for your Speckle models using Python and Google Sheets.
+## Introduction
+Quality Assurance and Quality Control (QAQC) in Building Information Modeling (BIM) traditionally relies on exporting models to neutral formats like IFC for validation. However, this process can introduce data loss before checking even begins. By validating data directly from the host application (like Revit, Rhino, etc.), we can:
+- Check data in its native format
+- Catch issues before information is lost in translation
+- Validate application-specific parameters and properties
+- Create more precise and reliable checks
+- Reduce the validation feedback loop
+- Enable teams to fix issues while actively working in their design tools
 
-## Prerequisites
-- A Speckle account (free at app.speckle.systems)
-- Basic Python knowledge
-- Python 3.8 or higher
-- Required packages:
-  - speckle-automate
-  - pandas
-  - python-Levenshtein
+This workshop teaches you how to create automated QAQC systems using Speckle Automate that work directly with native application data. You'll learn to build validations that can:
+- Systematically verify model data against project standards
+- Process native application properties and parameters
+- Create targeted validation rules for specific platforms
+- Generate clear feedback that references native elements
+- Enable teams to maintain high-quality BIM deliverables at source
 
-## Workshop Structure
-The workshop is divided into several exercises, each building upon the previous:
+By automating these checks at the source, teams can:
+- Validate data before any export-related loss occurs
+- Work with complete property sets from the authoring tool
+- Create platform-specific validation rules
+- Maintain data fidelity throughout the checking process
+- Fix issues directly in the native environment
+- Reduce the complexity of the QAQC workflow
 
-1. **Exercise 1**: Basic Automate Function
-   - Creating a simple automation that adds comments to random objects
-   - Understanding the basic structure of an Automate function
+## Learning Journey
 
-2. **Exercise 2**: Multiple Object Selection
-   - Working with multiple objects
-   - Adding visualization features
-   - Understanding object filtering
+### Exercise 0: Automate Foundations 🚀
+Starting from the basic template in `main.py`, learn fundamental Speckle Automate concepts:
+- Access native application data
+- Navigate object hierarchies
+- Interact with model elements
+- Handle basic error cases
 
-3. **Exercise 3**: Parameter Validation
-   - Implementing property checks
-   - Working with Revit parameters
-   - Creating validation rules
+### Exercise 1: Multi-Object Processing 🔄
+Build the foundation for systematic QAQC:
+- Filter native application objects
+- Process multiple elements efficiently
+- Provide visual feedback in the Speckle viewer
+- Handle platform-specific properties
+- Configure validation scope
 
-4. **Exercise 4**: Rule-based Validation
-   - Integrating with Google Sheets
-   - Creating complex validation rules
-   - Understanding the rule system
+### Exercise 2: Validation Framework 🔍
+Create a robust checking system:
+- Validate native parameters and properties
+- Filter by application-specific categories
+- Create reusable platform-aware rules
+- Implement tiered issue reporting
+- Organize results for easy review
+
+### Exercise 3: External Configuration 📊
+Transform into a flexible, maintainable QAQC solution:
+- Define standards in accessible spreadsheets
+- Support complex native property validation
+- Enable non-technical standards management
+- Generate detailed validation reports
+- Handle variations in property names
 
 ## Getting Started
 
-### Setting Up Your Environment
-1. Clone this repository
-2. Install requirements:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Creating Your Function
+1. Navigate to [latest.speckle.systems/functions](https://latest.speckle.systems/functions)
+2. Click the "New Function" button in the top right
+3. Follow the wizard steps:
+   - Authorize GitHub (first time only)
+   - Choose the Python template
+   - Define your function:
+     - Add an optional avatar/logo
+     - Choose a descriptive name
+     - Add a description (supports Markdown)
+     - Identify supported source applications
+     - Add relevant tags
 
-### Creating Your Rule Set
-1. Make a copy of our [Google Sheets template](link-to-template)
-2. Follow the template structure for defining rules:
-   - Rule Number
-   - Logic (WHERE/AND)
-   - Property Name
-   - Predicate
-   - Value
-   - Message
-   - Report Severity
+The wizard will:
+- Create a GitHub repository with template code
+- Set up GitHub Actions for deployment
+- Configure necessary secrets (`SPECKLE_FUNCTION_ID` and `SPECKLE_FUNCTION_TOKEN`)
+- Provide immediate access to start coding
 
-### Publishing Your Rules
-1. In Google Sheets:
-   - File → Share → Publish to Web
-   - Choose "Tab-separated values (.tsv)" format
-   - Copy the published URL
+### Next Steps
+Once your function is created, you can either:
+- Start from the template code in `main.py`
+- Replace it with code from this workshop's exercises
+- Work through the exercises incrementally to build your validation system
 
-### Running the Automation
-1. Configure your function inputs:
-   - For basic tests: Comment phrase and number of elements
-   - For validation: Category and property names
-   - For rule-based validation: Your published TSV URL
-
-2. Deploy to Speckle Automate:
-   - Follow the deployment instructions in each exercise folder
-   - Set up appropriate triggers for your automation
+### Prerequisites
+- Basic Python knowledge
+- Poetry installed (`curl -sSL https://install.python-poetry.org | python3 -`)
+- A verified Speckle account
 
 ## Additional Resources
-- [Workshop Slides](link-to-slides)
-- [Speckle Automate Documentation](https://speckle.guide/automate.html)
-- [Python SDK Documentation](https://speckle.xyz/docs/developers/python)
+- [Speckle Documentation](https://speckle.guide/)
+- [Automate Documentation](https://speckle.guide/automate/)
 
-## Support
-If you encounter any issues or have questions:
-- Check our [Troubleshooting Guide](link)
-- Join the [Speckle Community Forum](https://speckle.community)
-- Open an issue in this repository
+## Getting Help
+- Join our [Community Forum](https://speckle.community)
+- Check exercise READMEs for detailed guidance
+- Open GitHub issues for specific problems
 
 ## License
-This project is licensed under [appropriate license]
+Apache License 2.0 - See LICENSE file for details
