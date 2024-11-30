@@ -1,42 +1,70 @@
-from pydantic import Field
-from speckle_automate import AutomationContext, AutomateBase
-
-from Exercises.exercise_3.rules import apply_rules_to_objects
-from Exercises.exercise_3.inputs import FunctionInputs
-from Utilities.helpers import flatten_base
+from speckle_automate import AutomationContext
+from Utilities.helpers import flatten_base, speckle_print
 from Utilities.spreadsheet import read_rules_from_spreadsheet
-
+from .inputs import FunctionInputs
+from .rules import apply_rules_to_objects
 
 def automate_function(
     automate_context: AutomationContext,
     function_inputs: FunctionInputs,
 ) -> None:
-    """This version of the function will add a check for the new provide inputs.
-
+    """Exercise 3: Externalized Configuration
+    
+    This exercise demonstrates how to move from hardcoded rules to externally configured
+    validation rules. The key improvements from Exercise 2 are:
+    
+    1. Configuration is separated from code:
+       - Rules are stored in an external spreadsheet
+       - Business users can modify rules without developer involvement
+       - Rules can be updated without redeploying code
+    
+    2. More flexible rule structure:
+       - Rules can be grouped together
+       - Multiple conditions can be combined
+       - Different severity levels can be specified
+       - Custom messages can be provided for each rule
+       
+    3. Better maintainability:
+       - Rules are more accessible to review and audit
+       - Changes can be tracked in the spreadsheet
+       - Rules can be version-controlled separately from code
+       
     Args:
-        automate_context: A context helper object, that carries relevant information
-            about the runtime context of this function.
-            It gives access to the Speckle project data, that triggered this run.
-            It also has convenience methods attach result data to the Speckle model.
-        function_inputs: An instance object matching the defined schema.
+        automate_context: Provides access to the Speckle project data and methods
+            for attaching results.
+        function_inputs: Contains the URL to the rules spreadsheet.
     """
-
-    # the context provides a convenient way, to receive the triggering version
+    # Get the version root object as before
     version_root_object = automate_context.receive_version()
-
-    # We can continue to work with a flattened list of objects.
+    
+    # Flatten the object tree into a processable list
     flat_list_of_objects = list(flatten_base(version_root_object))
-
-    # read the rules from the spreadsheet
+    
+    # Read validation rules from the external spreadsheet
+    # This replaces the hardcoded rules from Exercise 2
     rules = read_rules_from_spreadsheet(function_inputs.spreadsheet_url)
-
-    # apply the rules to the objects
-    apply_rules_to_objects(flat_list_of_objects, rules, automate_context)
-
-    # set the automation context view, to the original model / version view
+    if rules is None or rules.empty:
+        automate_context.mark_run_failed("Failed to read rules from spreadsheet")
+        return
+        
+    # Apply all rules to the objects and collect results
+    # The rules system is now more sophisticated, supporting:
+    # - Rule grouping
+    # - Multiple conditions
+    # - Different severity levels
+    # - Custom success/failure messages
+    results = apply_rules_to_objects(flat_list_of_objects, rules, automate_context)
+    
+    # Calculate summary statistics to show the scope of validation
+    total_rules = len(results)
+    total_objects = len(flat_list_of_objects)
+    objects_validated = sum(len(passes) + len(fails) for passes, fails in results.values())
+    
+    # Reset view to original model state
     automate_context.set_context_view()
-
-    # report success
+    
+    # Provide a detailed summary of the validation results
     automate_context.mark_run_success(
-        f"Successfully applied rules to {len(flat_list_of_objects)} objects."
+        f"Successfully applied {total_rules} rules to {objects_validated} objects "
+        f"out of {total_objects} total objects."
     )
