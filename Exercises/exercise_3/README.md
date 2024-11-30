@@ -49,6 +49,8 @@ By externalising configuration, we address Exercise 2's inflexibility and scalab
 
 ## Spreadsheet Structure 🗂️
 
+![image](https://github.com/user-attachments/assets/4b75ed94-c2af-4acc-ba59-031f3aa695f0)
+
 The spreadsheet serves as a rule definition template. 
 
 ### Example Rule:
