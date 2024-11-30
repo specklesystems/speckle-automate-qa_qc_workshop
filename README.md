@@ -9,6 +9,8 @@ Quality Assurance and Quality Control (QAQC) in Building Information Modeling (B
 - Reduce the validation feedback loop
 - Enable teams to fix issues while actively working in their design tools
 
+![qaqc-workshop](https://github.com/user-attachments/assets/6caac9e1-4dff-4ba7-87d1-88d297bf8a9f)
+
 This workshop teaches you how to create automated QAQC systems using Speckle Automate that work directly with native application data. You'll learn to build validations that can:
 - Systematically verify model data against project standards
 - Process native application properties and parameters
