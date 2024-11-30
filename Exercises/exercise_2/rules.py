@@ -3,21 +3,42 @@ from specklepy.objects.base import Base
 from Levenshtein import ratio
 import re
 
-# We're going to define a set of rules that will allow us to filter and
-# process parameters in our Speckle objects. These rules will be encapsulated
-# in a class called `Rules`. We'll also define a set of rules specific to Revit
-# objects in a class called `RevitRules`.
+# The Rules system is built as a reusable library for Speckle Automate functions.
+# Key architectural principles:
+#
+# 1. Two-Layer Architecture:
+#    - Base Rules class for generic Speckle operations
+#    - Specialized RevitRules for Revit-specific needs
+#    This separation allows adding other platforms (e.g., Rhino) without modifying existing code
+#
+# 2. Static Methods Pattern:
+#    - All methods are static to avoid state management
+#    - Makes testing easier as each method is independent
+#    - Allows for functional composition of rules
+#
+# 3. Consistent Parameter Access:
+#    - Handles both direct properties and nested parameters
+#    - Manages legacy "@" prefixed properties
+#    - Provides uniform access regardless of storage method
+#
+# 4. Validation Chain:
+#    Start with basic existence checks -> Move to type validation -> End with value validation
+#    This progression allows for early failure and clear error messages
 
 
 class Rules:
     """
-    A collection of rules for processing properties in Speckle objects.
+    Generic Speckle object validation system.
+    
+    This core class provides platform-agnostic validation capabilities.
+    It serves as the foundation for specialized validators (like RevitRules)
+    and ensures consistent behaviour across different Speckle workflows.
 
-    Simple rules can be straightforwardly implemented as static methods that
-    return boolean value to be used either as a filter or a condition.
-    These can then be abstracted into returning lambda functions that  we can
-    use in our main processing logic. By encapsulating these rules, we can easily
-    extend or modify them in the future.
+    Best Practices:
+    - Use static methods for stateless validation
+    - Handle null cases explicitly
+    - Support both new and legacy property formats
+    - Provide clear failure cases
     """
 
     @staticmethod
@@ -26,11 +47,11 @@ class Rules:
     ) -> Optional[List[Base]]:
         """Try fetching the display value from a Speckle object.
 
-        This method encapsulates the logic for attempting to retrieve the display value from a Speckle object.
-        It returns a list containing the display values if found, otherwise it returns None.
+        This method encapsulates the logic for retrieving the display value from a Speckle object.
+        It returns a list containing the display values if found. Otherwise, it returns None.
 
         Args:
-            speckle_object (Base): The Speckle object to extract the display value from.
+            speckle_object (Base): The Speckle object from which to extract the display value.
 
         Returns:
             Optional[List[Base]]: A list containing the display values. If no display value is found,
@@ -87,23 +108,30 @@ class Rules:
 
         return False
 
-    # Below are more speculatively defined rules that could be used in a traversal of flat list parsing
+    # Rule Generation Layer
+    # These methods demonstrate how to create flexible, reusable validation rules
+    # using functional programming patterns
 
     @staticmethod
     def speckle_type_rule(
         desired_type: str,
     ) -> Callable[[Base], bool]:
         """
-        Rule: Check if a parameter's speckle_type matches the desired type.
+        Rule factory pattern example for type checking.
+        Demonstrates how to create flexible, reusable rules through closures.
         """
         return lambda prop: getattr(prop, "speckle_type", None) == desired_type
 
     @staticmethod
     def is_speckle_type(prop: Base, desired_type: str) -> bool:
         """
-        Rule: Check if a parameter's speckle_type matches the desired type.
+        Direct type-checking implementation.
+        Provides a simpler alternative to the factory pattern for basic use cases.
         """
         return getattr(prop, "speckle_type", None) == desired_type
+
+    # Value Validation Layer
+    # These methods handle common validation scenarios in AEC workflows
 
     @staticmethod
     def has_missing_value(prop: Dict[str, str]) -> bool:
@@ -132,7 +160,7 @@ class Rules:
         """
         Rule: Parameter Existence Check.
 
-        For certain critical parameters, their mere presence (or lack thereof) is vital.
+        Their mere presence (or lack thereof) is vital for certain critical parameters.
         This rule verifies if a specific parameter exists within an object, allowing
         teams to ensure that key data points are always present.
         """
@@ -140,7 +168,10 @@ class Rules:
 
 
 def get_displayable_objects(flat_list_of_objects: List[Base]) -> List[Base]:
-    # modify this lambda from before to use the static method from the Checks class
+    """
+    Utility function applying Rules system to filter displayable objects.
+    This demonstrates how to compose Rules methods into higher-level operations.
+    """
     return [
         speckle_object
         for speckle_object in flat_list_of_objects
@@ -148,31 +179,43 @@ def get_displayable_objects(flat_list_of_objects: List[Base]) -> List[Base]:
         and getattr(speckle_object, "id", None)
     ]
 
-    # and the same logic that could be modified to traverse a tree of objects
+# Revit-Specific Rules Implementation
+# This section implements specialized validation for Revit objects.
+# The architecture handles Revit's complex parameter system including:
+# - Multiple storage locations (direct properties, parameters dict, nested objects)
+# - Various parameter types (built-in, shared, project, family)
+# - Type vs Instance parameters
+# - Value type handling and conversion
 
-
-# Now we're going to define a set of rules that are specific to Revit objects.
 class RevitRules:
+    """
+    Revit-specific validation system extending base Rules capabilities.
+    
+    This specialized validator handles Revit's unique parameter system:
+    - Built-in vs Custom parameters
+    - Type vs Instance parameters
+    - Project vs Family parameters
+    - Shared parameters
+    
+    Design Philosophy:
+    - Abstract away Revit parameter complexity
+    - Provide consistent access patterns
+    - Handle all parameter storage methods
+    - Support type-safe value comparisons
+    """
+
     @staticmethod
     def has_parameter(speckle_object: Base, parameter_name: str) -> bool:
         """
-        Checks if the speckle_object has a Revit parameter with the given name.
-
-        This method checks if the speckle_object has a parameter with the specified name,
-        considering the following cases:
-        1. The parameter is a named property at the root object level.
-        2. The parameter is stored as a key in the "parameters" dictionary.
-        3. The parameter is stored as a nested dictionary within the "parameters" property,
-           and the parameter name is stored as the value of the "name" property within each nested dictionary.
-
-        If the parameter exists, it returns True; otherwise, it returns False.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check for.
-
-        Returns:
-            bool: True if the object has the parameter, False otherwise.
+        Foundation method for parameter validation.
+        
+        Handles three parameter storage methods in Revit objects:
+        1. Direct properties (fastest, used for built-in parameters)
+        2. Parameters dictionary (common for instance parameters)
+        3. Nested parameter objects (used for shared parameters)
+        
+        This method is the backbone of parameter validation, used by almost
+        all other validation methods in the class.
         """
         if hasattr(speckle_object, parameter_name):
             return True
@@ -204,26 +247,16 @@ class RevitRules:
         default_value: Any = None,
     ) -> Any | None:
         """
-        Retrieves the value of the specified Revit parameter from the speckle_object.
-
-        This method checks if the speckle_object has a parameter with the specified name,
-        considering the following cases:
-        1. The parameter is a named property at the root object level.
-        2. The parameter is stored as a key in the "parameters" dictionary.
-        3. The parameter is stored as a nested dictionary within the "parameters" property,
-           and the parameter name is stored as the value of the "name" property within each nested dictionary.
-
-        If the parameter exists and its value is not None or the specified default_value, it returns the value.
-        If the parameter does not exist or its value is None or the specified default_value, it returns None.
-
-        Args:
-            speckle_object (Base): The Speckle object to retrieve the parameter value from.
-            parameter_name (str): The name of the parameter to retrieve the value for.
-            default_value: The default value to compare against. If the parameter value matches this value,
-                           it will be treated the same as None.
-
-        Returns:
-            The value of the parameter if it exists and is not None or the specified default_value, or None otherwise.
+        Core parameter access method.
+        
+        This is the primary method for accessing parameter values, handling:
+        - Direct property access
+        - Dictionary-style parameter access
+        - Nested parameter objects
+        - Default value handling
+        - Type conversion and validation
+        
+        All value-based validation methods should use this as their foundation.
         """
         # Attempt to retrieve the parameter from the root object level
         value = getattr(speckle_object, parameter_name, None)
@@ -262,20 +295,17 @@ class RevitRules:
             None,
         )
 
+    # Value Comparison Layer
+    # These methods build on the core parameter access to provide specific
+    # validation rules for different comparison scenarios
+
     @staticmethod
     def is_parameter_value(
         speckle_object: Base, parameter_name: str, value_to_match: Any
     ) -> bool:
         """
-        Checks if the value of the specified parameter matches the given value.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            value_to_match (Any): The value to match against.
-
-        Returns:
-            bool: True if the parameter value matches the given value, False otherwise.
+        Exact value matching implementation.
+        Foundation for simple equality-based validation rules.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         return parameter_value == value_to_match
@@ -289,19 +319,8 @@ class RevitRules:
         threshold: float = 0.8,
     ) -> bool:
         """
-        Checks if the value of the specified parameter matches the given pattern.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            pattern (str): The pattern to match against.
-            fuzzy (bool): If True, performs fuzzy matching using Levenshtein distance.
-                          If False (default), performs exact pattern matching using regular expressions.
-            threshold (float): The similarity threshold for fuzzy matching (default: 0.8).
-                               Only applicable when fuzzy=True.
-
-        Returns:
-            bool: True if the parameter value matches the pattern (exact or fuzzy), False otherwise.
+        Pattern matching implementation supports both exact and fuzzy matching.
+        It is helpful for text-based parameters where exact matches might be too strict.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         if parameter_value is None:
@@ -313,20 +332,15 @@ class RevitRules:
         else:
             return bool(re.match(pattern, str(parameter_value)))
 
+    # Numeric Comparison Layer
+    # Specialized methods for handling numeric parameters with type safety
+
     @staticmethod
     def is_parameter_value_greater_than(
         speckle_object: Base, parameter_name: str, threshold: Union[int, float]
     ) -> bool:
         """
-        Checks if the value of the specified parameter is greater than the given threshold.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            threshold (Union[int, float]): The threshold value to compare against.
-
-        Returns:
-            bool: True if the parameter value is greater than the threshold, False otherwise.
+        Type-safe numeric comparison for greater than operations.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         if parameter_value is None:
@@ -342,15 +356,7 @@ class RevitRules:
         speckle_object: Base, parameter_name: str, threshold: Union[int, float]
     ) -> bool:
         """
-        Checks if the value of the specified parameter is less than the given threshold.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            threshold (Union[int, float]): The threshold value to compare against.
-
-        Returns:
-            bool: True if the parameter value is less than the threshold, False otherwise.
+        Type-safe numeric comparison for less than operations.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         if parameter_value is None:
@@ -370,18 +376,9 @@ class RevitRules:
         inclusive: bool = True,
     ) -> bool:
         """
-        Checks if the value of the specified parameter falls within the given range.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            min_value (Union[int, float]): The minimum value of the range.
-            max_value (Union[int, float]): The maximum value of the range.
-            inclusive (bool): If True (default), the range is inclusive (min <= value <= max).
-                              If False, the range is exclusive (min < value < max).
-
-        Returns:
-            bool: True if the parameter value falls within the range (inclusive), False otherwise.
+        Range validation for numeric parameters.
+        Supports both inclusive and exclusive range checks with type safety.
+        Part of the numeric validation suite for comprehensive value checking.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         if parameter_value is None:
@@ -402,30 +399,22 @@ class RevitRules:
         speckle_object: Base, parameter_name: str, value_list: List[Any]
     ) -> bool:
         """
-        Checks if the value of the specified parameter is present in the given list of values.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-            value_list (List[Any]): The list of values to check against.
-
-        Returns:
-            bool: True if the parameter value is found in the list, False otherwise.
+        List membership validation.
+        It is important for checking against predefined valid values,
+        common in Revit for enumerated parameters.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         return parameter_value in value_list
 
+    # Boolean Parameter Layer
+    # Specialized handling for boolean parameters, common in Revit
+    # for yes/no properties and switches
+
     @staticmethod
     def is_parameter_value_true(speckle_object: Base, parameter_name: str) -> bool:
         """
-        Checks if the value of the specified parameter is True.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-
-        Returns:
-            bool: True if the parameter value is True, False otherwise.
+        Boolean validation for true values.
+        Used for confirming positive states in yes/no parameters.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         return parameter_value is True
@@ -433,49 +422,29 @@ class RevitRules:
     @staticmethod
     def is_parameter_value_false(speckle_object: Base, parameter_name: str) -> bool:
         """
-        Checks if the value of the specified parameter is False.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            parameter_name (str): The name of the parameter to check.
-
-        Returns:
-            bool: True if the parameter value is False, False otherwise.
+        Boolean validation for false values.
+        Used for confirming negative states in yes/no parameters.
         """
         parameter_value = RevitRules.get_parameter_value(speckle_object, parameter_name)
         return parameter_value is False
 
+    # Category Management Layer
+    # These methods handle Revit's category system, which is fundamental
+    # to object organization and filtering in Revit workflows
+
     @staticmethod
     def has_category(speckle_object: Base) -> bool:
         """
-        Checks if the speckle_object has a 'category' parameter.
-
-        This method checks if the speckle_object has a 'category' parameter.
-        If the 'category' parameter exists, it returns True; otherwise, it returns False.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-
-        Returns:
-            bool: True if the object has the 'category' parameter, False otherwise.
+        Category existence check.
+        Foundational method for category-based filtering and validation.
         """
         return RevitRules.has_parameter(speckle_object, "category")
 
     @staticmethod
     def is_category(speckle_object: Base, category_input: str) -> bool:
         """
-        Checks if the value of the 'category' property matches the given input.
-
-        This method checks if the 'category' property of the speckle_object
-        matches the given category_input. If they match, it returns True;
-        otherwise, it returns False.
-
-        Args:
-            speckle_object (Base): The Speckle object to check.
-            category_input (str): The category value to compare against.
-
-        Returns:
-            bool: True if the 'category' property matches the input, False otherwise.
+        Category matching implementation.
+        The core method is for filtering objects by their Revit category.
         """
         category_value = RevitRules.get_parameter_value(speckle_object, "category")
         return category_value == category_input
@@ -483,39 +452,30 @@ class RevitRules:
     @staticmethod
     def get_category_value(speckle_object: Base) -> str:
         """
-        Retrieves the value of the 'category' parameter from the speckle_object.
-
-        This method retrieves the value of the 'category' parameter from the speckle_object.
-        If the 'category' parameter exists and its value is not None, it returns the value.
-        If the 'category' parameter does not exist or its value is None, it returns an empty string.
-
-        Args:
-            speckle_object (Base): The Speckle object to retrieve the 'category' parameter value from.
-
-        Returns:
-            str: The value of the 'category' parameter if it exists and is not None, or an empty string otherwise.
+        Category value retrieval.
+        Helper method for accessing category information directly.
         """
         return RevitRules.get_parameter_value(speckle_object, "category")
 
+
+# Utility Layer
+# High-level operations that compose multiple rules for common workflows
 
 def filter_objects_by_category(
     speckle_objects: List[Base], category_input: str
 ) -> Tuple[List[Base], List[Base]]:
     """
-    Filters objects by category value and test.
-
-    This function takes a list of Speckle objects, filters out the objects
-    with a matching category value and satisfies the test, and returns
-    both the matching and non-matching objects.
-
-    Args:
-        speckle_objects (List[Base]): The list of Speckle objects to filter.
-        category_input (str): The category value to match against.
-
-    Returns:
-        Tuple[List[Base], List[Base]]: A tuple containing two lists:
-                                        - The first list contains objects with matching category and test.
-                                        - The second list contains objects without matching category or test.
+    High-level category filtering operation.
+    
+    This utility demonstrates how to compose RevitRules methods into
+    practical workflows. It separates objects into matching and non-matching
+    groups for easier processing.
+    
+    Design Pattern:
+    - Takes a list of objects and a single criterion
+    - Returns two lists (matching and non-matching)
+    - Uses RevitRules for consistent validation
+    - Maintains clear separation of concerns
     """
     matching_objects = []
     non_matching_objects = []
